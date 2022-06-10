@@ -7,27 +7,37 @@
 #include <complex>
 #include <list>
 #include <iostream>
+#include<math.h>
 
 //------------------------------DATASEGMENT------------------------------//
+const double PI = 3.14159265358979323846264338;
 float XWinSize = 980, YWinSize = 980;
-int maxlen = 2;
+const int maxlen = 2;
+
 float XLeft = -1 * maxlen, XRight = maxlen, YDown = -1 * maxlen, YUp = maxlen, ZNear = -1 * maxlen, ZFar = maxlen;
 float x0 = 4, y00 = -3, z0 = 2,
 xe = 0, ye = 0, ze = 0, xp = 0, yp = 0, zp = 10,
 dx = 0, dy = 1, dz = 0,
 //dx = xe - x0, dy = ye - y00, dz = ze - z0,
-x, y, z, t = 0, s = 0, scale = 1,
-teta = -1;
-int afact = 1.0;// alfa factor( the amount we will want to increase/decrease alfa )
-const float maxalfa = 10;
-float alfa = maxalfa;//the maximum value of alfa (the display angle).
+x, y, z, t = 0, s = 0, scale = 1;
+
+const float init_shape_factor = 2;
+
+float shape_factor = init_shape_factor;// the multiplication in the itterative complex equation (the usual one in mandelbrot is z = z^2+c)
+
+int efact = 5.0;// exponent factor( the amount we will want to increase/decrease the exponent in the itirrated equation )
+
+float alfa = 10;// the maximum value of alfa (the display angle).
+
 GLuint initialmandel;
 
-float addition;// addition is the amount that we will increase the X and Y axes in the gausian plane
 
 float initmandarr[1121][1121][5]; // A 3D array that it's fundemental component is an array of length 5
 							  // which is built this way :      =======>{x axis position, y axis position, R, G, B}<=======
 float mandarr[1121][1121][5];
+
+
+//------------------------------DATASEGMENT------------------------------//
 
 //colors
 typedef struct {
@@ -101,6 +111,17 @@ rgb hsv2rgb(hsv in)
 	return out;
 }
 
+//std::complex<float> powc(std::complex<float> comp1, float n) {// complex number to the power of n.
+//	float r = abs(comp1);
+//	float cTeta = 0;
+//	if (comp1.imag() != 0)
+//		float cTeta = atan(deg(comp1.imag()) / comp1.real());
+//
+//	comp1.real(powf(r, n) * cos(deg(cTeta * n)));
+//	comp1.imag(powf(r, n) * sin(deg(cTeta * n)));
+//	return comp1;
+//}
+
 
 void draw_string(void* font, const char* str);
 
@@ -108,23 +129,23 @@ void draw_string(void* font, const char* str);
 int color_set[][3] = { {0, 64, 255}, {230, 153, 255} };
 float opopo = 0.25;
 int max_itter = 80;
+int max_itter_lim = 20;
 std::complex<float> mycomplex(0.0, 0.0);
-std::complex<double> i(0, 1);
 
 
 //----------------------------------------------------------------------//
 
+void keyboard(unsigned char key, int x, int y);
 
-int mandelbrot(std::complex<float> c) {// z(n+1)=z(n)^2+c
-	std::complex<float> z(0, 0);
+int mandelbrot(std::complex<double> c) {// z(n+1)=z(n)^2+c
+	std::complex<double> z(0, 0);
 	int n = 0;
 	while ((fabs(z.real()) < 2 && fabs(z.imag()) < 2) && n < max_itter) {
-		z = z * z + c;
+		z = pow(z, shape_factor) + c;
 		n++;
 	}
 	return n;
 }
-
 
 
 void plan_mandel_dots(std::complex<float> c, float parmandarr[1121][1121][5]) {// z(n+1)=z(n)+
@@ -198,8 +219,24 @@ void display(void)
 	gluLookAt(xp, yp, zp, xe, ye, ze, dx, dy, dz);
 
 
-	glCallList(initialmandel);
+	if(shape_factor == init_shape_factor)
+		glCallList(initialmandel);
+	else {
+		for (float k = -560; k < 560; k++) {
+			mycomplex.real(k);
+			for (float j = -560; j < 560; j++) {
+				draw_mandel_dots(mycomplex, mandarr);
+				mycomplex.imag(j);
+			}
+		}
+	}
 
+	
+	//mycomplex.real(0);
+	//mycomplex.imag(0);
+	//std::complex<float> check1 = mycomplex;
+	//check1 = powc(check1, 2);
+	//printf("%f+%f*i\n", check1.real(),check1.imag());
 
 	glutPostRedisplay();
 	glutSwapBuffers();
@@ -215,7 +252,7 @@ void initial(void)
 	initialmandel = glGenLists(1);
 	glNewList(initialmandel, GL_COMPILE);
 
-	for (float k = -560; k < 560; k++) {// remember : golden number = 0.00357 (golden number means (4/1120) and 1120 is the exact amount of dots you need to fill this entire thing)
+	for (float k = -560; k < 560; k++) {// remember : golden number = 0.00357 (golden number means (4/1120) and 1120 is the exact amount of dots you need in order to fill this entire thing)
 		mycomplex.real(k * 0.00357);
 		for (float j = -560; j < 560; j++) {
 			plan_mandel_dots(mycomplex, initmandarr);
@@ -237,69 +274,39 @@ void changeCoordinates(float Cx, float Cy)
 {
 	float newxp = (Cx - XWinSize / 2) / fabs(XWinSize / maxlen);
 	float newyp = -(Cy - YWinSize / 2) / fabs(XWinSize / maxlen);
-	/*xp = xp + newxp * (alfa / maxalfa);
-	yp = yp + newyp * (alfa / maxalfa);
-	xe = xp;
-	ye = yp;*/
 	xp, yp, xe, ye = 0;
 }
 
-void mouseClick(int button, int state, int x, int y)
-{
-	float kjrange[2] = { xp - 2 * (alfa / maxalfa) , xp + 2 * (alfa / maxalfa) };
-	float addition;
 
-	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)
-	{
-		if (alfa > afact && alfa <= maxalfa)
-			alfa -= afact;
-
-		changeCoordinates((float)x, (float)y);
-		addition = 0.00357 * (alfa / maxalfa);
-		//for (float k = kjrange[0]; k < kjrange[1]; k += addition) {// remember : golden number = 0.00357 (golden number means (4/1120) and 1120 is the exact amount of dots you need to fill this entire thing)
-		//	mycomplex.real(k);
-		//	for (float j = kjrange[0]; j < kjrange[1]; j += addition) {
-		//		plan_mandel_dots(mycomplex, mandarr);
-		//		mycomplex.imag(j * 0.00357);
-		//	}
-		//}
-	}
-	
-	if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN)
-	{
-
-
-		if (alfa >= 0 && alfa < maxalfa)
-			alfa += afact;
-
-		changeCoordinates(x, y);
-		addition = 0.00357 * (alfa / maxalfa);
-		//for (float k = kjrange[0]; k < kjrange[1]; k += addition) {// remember : golden number = 0.00357 (golden number means (4/1120) and 1120 is the exact amount of dots you need to fill this entire thing)
-		//	mycomplex.real(k);
-		//	for (float j = kjrange[0]; j < kjrange[1]; j += addition) {
-		//		plan_mandel_dots(mycomplex, initmandarr);
-		//		mycomplex.imag(j);
-		//	}
-		//}
-	}
-
-
-	printf("(%f , ", xp);
-	printf("%f)", yp);
-	printf("-->%f\n", alfa);
-
-}
 
 void keyboard(unsigned char key, int x, int y) {
 	if (tolower(key) == 'w')
 	{
-		XLeft /= 10, XRight /= 10, YDown /= 10, YUp /= 10, ZNear /= 10, ZFar /= 10;
+		printf("w");
+		shape_factor++;
 	}
 	if (tolower(key) == 's')
 	{
-		XLeft *= 10, XRight *= 10, YDown *= 10, YUp *= 10, ZNear *= 10, ZFar *= 10;
-		opopo += 0.1;
-		printf("%f", opopo);
+		printf("s");
+		shape_factor--;
+	}
+	//----------RESETS THE VALUE TO 2----------//
+	if (tolower(key) == 'r')
+	{
+		printf("%c",key);
+		shape_factor = init_shape_factor;
+	}
+	//-----------------------------------------//
+	printf("%f \n",shape_factor);
+	if (tolower(key) == 's' || tolower(key) == 'w') {
+		printf("s");
+		for (float k = -560; k < 560; k++) {// remember : golden number = 0.00357 (golden number means (4/1120) and 1120 is the exact amount of dots you need to fill this entire thing)
+			mycomplex.real(k * 0.00357);
+			for (float j = -560; j < 560; j++) {
+				plan_mandel_dots(mycomplex, mandarr);
+				mycomplex.imag(j * 0.00357);
+			}
+		}
 	}
 }
 
@@ -314,9 +321,9 @@ void main(int argc, char** argv)
 	initial();
 	glutDisplayFunc(display);
 	glutKeyboardFunc(keyboard);//<<===========
-	/*glutSpecialFunc(Special);
-	glutIdleFunc(idle);*/
-	glutMouseFunc(mouseClick);
+	//glutSpecialFunc(Special);
+	//glutIdleFunc(idle);
+	//glutMouseFunc(mouseClick);
 	glEnable(GL_DEPTH_TEST);
 	glutMainLoop();
 }
